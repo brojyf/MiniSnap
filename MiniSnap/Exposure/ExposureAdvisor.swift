@@ -93,6 +93,64 @@ enum Mini99FocusMode: String, CaseIterable, Identifiable {
     }
 }
 
+enum SubjectDistancePreset: String, CaseIterable, Identifiable {
+    case close
+    case standard
+    case far
+
+    var id: String { rawValue }
+
+    var localizedName: String {
+        switch self {
+        case .close:
+            "近"
+        case .standard:
+            "中"
+        case .far:
+            "远"
+        }
+    }
+
+    var distanceMeters: Double {
+        switch self {
+        case .close:
+            0.45
+        case .standard:
+            1.5
+        case .far:
+            3.2
+        }
+    }
+}
+
+enum SubjectDetection: String, Equatable {
+    case face
+    case person
+    case centerSubject
+
+    var localizedName: String {
+        switch self {
+        case .face:
+            "人脸"
+        case .person:
+            "人物"
+        case .centerSubject:
+            "中心"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .face:
+            "face.smiling"
+        case .person:
+            "person.fill"
+        case .centerSubject:
+            "viewfinder"
+        }
+    }
+}
+
 struct ExposureControl: Equatable {
     let shootingMode: ShootingMode
     let focusMode: Mini99FocusMode
@@ -106,6 +164,26 @@ struct ExposureInput: Equatable {
     let highlightRatio: Double
     let faceAreaRatio: Double
     let distance: Double
+    let hasFace: Bool
+    let subjectDetection: SubjectDetection
+
+    init(
+        faceLuma: Double,
+        sceneLuma: Double,
+        highlightRatio: Double,
+        faceAreaRatio: Double,
+        distance: Double,
+        hasFace: Bool = true,
+        subjectDetection: SubjectDetection? = nil
+    ) {
+        self.faceLuma = faceLuma
+        self.sceneLuma = sceneLuma
+        self.highlightRatio = highlightRatio
+        self.faceAreaRatio = faceAreaRatio
+        self.distance = distance
+        self.hasFace = hasFace
+        self.subjectDetection = subjectDetection ?? (hasFace ? .face : .centerSubject)
+    }
 }
 
 struct ExposureRecommendation: Equatable {
@@ -123,14 +201,21 @@ enum ExposureAdvisor {
         let backlit = faceSceneDelta < -0.12 && input.highlightRatio > 0.1
         let faceDark = input.faceLuma < 0.35
         let highContrast = input.highlightRatio > 0.2
+        let flashReachable = input.distance >= 0.3 && input.distance <= 2.7
+        let closeShadowFillUseful = flashReachable
+            && input.faceLuma < 0.46
+            && input.sceneLuma >= 0.25
+            && faceSceneDelta < -0.04
+            && !highContrast
         let focusMode = Mini99FocusMode.recommended(for: input.distance)
+        let subjectName = input.hasFace ? "人脸" : "画面中心主体"
 
         let control: ExposureControl
         var reasons: [String] = []
 
         if backlit {
             reasons.append("检测到逆光")
-            reasons.append("人脸亮度低于背景")
+            reasons.append("\(subjectName)亮度低于背景")
             reasons.append("开启补光闪光优于提高曝光")
 
             if input.sceneLuma > 0.6 {
@@ -145,7 +230,11 @@ enum ExposureAdvisor {
                 reasons.append("环境过暗且主体超过闪光有效距离")
                 reasons.append("B 门比闪光更适合保留夜景背景")
                 control = ExposureControl(shootingMode: .bulb, focusMode: focusMode, ev: .l, flash: .off)
-            } else if input.distance <= 2.7 {
+            } else if input.distance < 0.3 {
+                reasons.append("主体低于相机最近合焦距离")
+                reasons.append("先后退到 0.3 米外再使用闪光")
+                control = ExposureControl(shootingMode: .normal, focusMode: focusMode, ev: .l, flash: .off)
+            } else if flashReachable {
                 reasons.append("主体在闪光有效距离内")
                 reasons.append("室内模式可提亮暗处背景")
                 control = ExposureControl(shootingMode: .indoor, focusMode: focusMode, ev: .l, flash: .fill)
@@ -154,16 +243,20 @@ enum ExposureAdvisor {
                 reasons.append("室内模式可提亮暗处背景")
                 control = ExposureControl(shootingMode: .indoor, focusMode: focusMode, ev: .l, flash: .off)
             }
+        } else if closeShadowFillUseful {
+            reasons.append("\(subjectName)略暗且在闪光有效距离内")
+            reasons.append("Fill 闪光可补近处阴影并保留背景曝光")
+            control = ExposureControl(shootingMode: .normal, focusMode: focusMode, ev: .n, flash: .fill)
         } else if faceDark {
-            reasons.append("人脸偏暗")
-            reasons.append("优先提高人脸曝光")
-            control = ExposureControl(shootingMode: .normal, focusMode: focusMode, ev: .l, flash: input.distance <= 2.7 ? .fill : .off)
+            reasons.append("\(subjectName)偏暗")
+            reasons.append("优先提高\(subjectName)曝光")
+            control = ExposureControl(shootingMode: .normal, focusMode: focusMode, ev: .l, flash: flashReachable ? .fill : .off)
         } else if input.sceneLuma > 0.7 && highContrast {
             reasons.append("环境高亮且对比强")
             reasons.append("降低曝光以保护背景高光")
             control = ExposureControl(shootingMode: .normal, focusMode: focusMode, ev: .dMinus, flash: .off)
         } else {
-            reasons.append("人脸与背景亮度平衡")
+            reasons.append("\(subjectName)与背景亮度平衡")
             control = ExposureControl(shootingMode: .normal, focusMode: focusMode, ev: .n, flash: .off)
         }
 
@@ -186,7 +279,7 @@ enum ExposureAdvisor {
     ) -> Double {
         var score = 0.62
 
-        if input.faceAreaRatio > 0.01 {
+        if input.hasFace && input.faceAreaRatio > 0.01 {
             score += 0.08
         }
 
@@ -213,7 +306,7 @@ enum ExposureAdvisor {
         var warnings: [String] = []
 
         if input.faceLuma < 0.3 {
-            warnings.append("人脸可能仍然偏暗")
+            warnings.append(input.hasFace ? "人脸可能仍然偏暗" : "中心主体可能仍然偏暗")
         }
 
         if input.highlightRatio > 0.25 {

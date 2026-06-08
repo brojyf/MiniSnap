@@ -4,7 +4,7 @@ import Foundation
 
 struct SceneMeasurement: Equatable {
     let input: ExposureInput
-    let faceBounds: CGRect
+    let faceBounds: CGRect?
 }
 
 struct LumaStats: Equatable {
@@ -13,7 +13,12 @@ struct LumaStats: Equatable {
 }
 
 enum LumaAnalyzer {
-    static func measurement(pixelBuffer: CVPixelBuffer, faceBounds: CGRect, distance: Double) -> SceneMeasurement? {
+    static func measurement(
+        pixelBuffer: CVPixelBuffer,
+        subjectBounds: CGRect?,
+        subjectDetection: SubjectDetection,
+        distance: Double
+    ) -> SceneMeasurement? {
         guard CVPixelBufferIsPlanar(pixelBuffer) else {
             return nil
         }
@@ -38,7 +43,9 @@ enum LumaAnalyzer {
             rect: CGRect(x: 0, y: 0, width: width, height: height)
         )
 
-        let faceRect = pixelRect(fromVisionBounds: faceBounds, imageWidth: width, imageHeight: height)
+        let faceRect = subjectBounds.map {
+            pixelRect(fromVisionBounds: $0, imageWidth: width, imageHeight: height)
+        } ?? centerSubjectRect(imageWidth: width, imageHeight: height)
         let faceStats = stats(
             lumaPointer: lumaPointer,
             width: width,
@@ -57,10 +64,24 @@ enum LumaAnalyzer {
             sceneLuma: sceneStats.average,
             highlightRatio: sceneStats.highlightRatio,
             faceAreaRatio: faceAreaRatio,
-            distance: distance
+            distance: distance,
+            hasFace: subjectDetection == .face,
+            subjectDetection: subjectDetection
         )
 
-        return SceneMeasurement(input: input, faceBounds: faceBounds)
+        return SceneMeasurement(input: input, faceBounds: subjectDetection == .face ? subjectBounds : nil)
+    }
+
+    private static func centerSubjectRect(imageWidth: Int, imageHeight: Int) -> CGRect {
+        let width = Double(imageWidth) * 0.42
+        let height = Double(imageHeight) * 0.42
+
+        return CGRect(
+            x: (Double(imageWidth) - width) / 2,
+            y: (Double(imageHeight) - height) / 2,
+            width: width,
+            height: height
+        )
     }
 
     private static func pixelRect(fromVisionBounds bounds: CGRect, imageWidth: Int, imageHeight: Int) -> CGRect {

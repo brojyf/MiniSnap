@@ -1,7 +1,9 @@
 import AVFoundation
 import Combine
 import CoreGraphics
+import CoreImage
 import Foundation
+import UIKit
 import Vision
 
 final class CameraViewModel: NSObject, ObservableObject {
@@ -11,6 +13,15 @@ final class CameraViewModel: NSObject, ObservableObject {
     @Published private(set) var statusText = "等待相机权限"
     @Published private(set) var automaticDistanceAvailable = false
     @Published private(set) var automaticDistance: Double?
+    @Published private(set) var saveStatusText: String?
+    @Published private(set) var isSavingPhoto = false
+    @Published var manualDistancePreset: SubjectDistancePreset = .standard {
+        didSet {
+            if !automaticDistanceAvailable {
+                subjectDistance = manualDistancePreset.distanceMeters
+            }
+        }
+    }
     @Published var subjectDistance = 2.0
 
     let session = AVCaptureSession()
@@ -19,9 +30,12 @@ final class CameraViewModel: NSObject, ObservableObject {
     private let analysisQueue = DispatchQueue(label: "miniSnap.camera.analysis")
     private let videoOutput = AVCaptureVideoDataOutput()
     private let depthOutput = AVCaptureDepthDataOutput()
+    private let imageContext = CIContext()
+    private let watchPreviewTransmitter = WatchPreviewTransmitter()
     private var isConfigured = false
     private var lastAnalysisTime = Date.distantPast
     private var latestFaceBounds: CGRect?
+    private var latestFrameImage: UIImage?
 
     override init() {
         authorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
@@ -74,6 +88,14 @@ final class CameraViewModel: NSObject, ObservableObject {
             guard let self, self.session.isRunning else { return }
             self.session.stopRunning()
         }
+    }
+
+    func saveFramedPhoto() {
+        saveLatestFrame(includingRecommendation: false)
+    }
+
+    func saveRecommendationPhoto() {
+        saveLatestFrame(includingRecommendation: true)
     }
 
     private func configureSession() {
@@ -216,32 +238,45 @@ final class CameraViewModel: NSObject, ObservableObject {
 
         lastAnalysisTime = now
 
-        let request = VNDetectFaceRectanglesRequest()
+        let faceRequest = VNDetectFaceRectanglesRequest()
+        let humanRequest = VNDetectHumanRectanglesRequest()
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .right)
 
         do {
-            try handler.perform([request])
+            try handler.perform([faceRequest, humanRequest])
         } catch {
-            publishStatus("人脸检测失败")
+            publishStatus("主体检测失败")
             return
         }
 
-        guard let face = request.results?.max(by: { $0.boundingBox.width * $0.boundingBox.height < $1.boundingBox.width * $1.boundingBox.height }) else {
+        let frameImage = image(from: pixelBuffer)
+        let largestFace = faceRequest.results?.max(by: { $0.boundingBox.width * $0.boundingBox.height < $1.boundingBox.width * $1.boundingBox.height })
+        let largestHuman = humanRequest.results?.max(by: { $0.boundingBox.width * $0.boundingBox.height < $1.boundingBox.width * $1.boundingBox.height })
+        let subjectBounds: CGRect?
+        let subjectDetection: SubjectDetection
+        let nextStatusText: String
+
+        if let largestFace {
+            subjectBounds = largestFace.boundingBox
+            subjectDetection = .face
+            nextStatusText = "检测到人脸"
+            latestFaceBounds = largestFace.boundingBox
+        } else if let largestHuman {
+            subjectBounds = largestHuman.boundingBox
+            subjectDetection = .person
+            nextStatusText = "检测到人物，按人体估算"
             latestFaceBounds = nil
-            DispatchQueue.main.async { [weak self] in
-                self?.measurement = nil
-                self?.recommendation = nil
-                self?.automaticDistance = nil
-                self?.statusText = "未检测到人脸"
-            }
-            return
+        } else {
+            subjectBounds = nil
+            subjectDetection = .centerSubject
+            nextStatusText = "未检测到人物，按中心主体估算"
+            latestFaceBounds = nil
         }
-
-        latestFaceBounds = face.boundingBox
 
         guard let measurement = LumaAnalyzer.measurement(
             pixelBuffer: pixelBuffer,
-            faceBounds: face.boundingBox,
+            subjectBounds: subjectBounds,
+            subjectDetection: subjectDetection,
             distance: subjectDistance
         ) else {
             publishStatus("亮度分析失败")
@@ -251,9 +286,69 @@ final class CameraViewModel: NSObject, ObservableObject {
         let recommendation = ExposureAdvisor.decide(measurement.input)
 
         DispatchQueue.main.async { [weak self] in
+            self?.latestFrameImage = frameImage
+            self?.watchPreviewTransmitter.sendPreview(image: frameImage)
             self?.measurement = measurement
             self?.recommendation = recommendation
-            self?.statusText = "建议已更新"
+            if subjectDetection != .face {
+                self?.automaticDistance = nil
+            }
+            self?.statusText = nextStatusText
+        }
+    }
+
+    private func image(from pixelBuffer: CVPixelBuffer) -> UIImage? {
+        let image = CIImage(cvPixelBuffer: pixelBuffer)
+
+        guard let cgImage = imageContext.createCGImage(image, from: image.extent) else {
+            return nil
+        }
+
+        return UIImage(cgImage: cgImage, scale: 1, orientation: .right)
+    }
+
+    private func saveLatestFrame(includingRecommendation: Bool) {
+        guard !isSavingPhoto else {
+            return
+        }
+
+        guard let latestFrameImage else {
+            saveStatusText = "还没有可保存的画面"
+            clearSaveStatusAfterDelay("还没有可保存的画面")
+            return
+        }
+
+        let recommendation = recommendation
+        let image = includingRecommendation
+            ? PhotoExportRenderer.recommendationImage(photo: latestFrameImage, recommendation: recommendation)
+            : PhotoExportRenderer.framedPhoto(photo: latestFrameImage)
+
+        isSavingPhoto = true
+        saveStatusText = "正在保存"
+
+        Task { @MainActor in
+            do {
+                try await PhotoLibrarySaver.save(image)
+                let finalStatus = includingRecommendation ? "已保存参数图" : "已保存相框照片"
+                saveStatusText = finalStatus
+                clearSaveStatusAfterDelay(finalStatus)
+            } catch {
+                let finalStatus = "保存失败：\(error.localizedDescription)"
+                saveStatusText = finalStatus
+                clearSaveStatusAfterDelay(finalStatus)
+            }
+
+            isSavingPhoto = false
+        }
+    }
+
+    private func clearSaveStatusAfterDelay(_ statusText: String) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+
+            if saveStatusText == statusText, !isSavingPhoto {
+                saveStatusText = nil
+            }
         }
     }
 
@@ -266,6 +361,9 @@ final class CameraViewModel: NSObject, ObservableObject {
     private func publishAutomaticDistanceAvailability(_ isAvailable: Bool) {
         DispatchQueue.main.async { [weak self] in
             self?.automaticDistanceAvailable = isAvailable
+            if isAvailable == false {
+                self?.subjectDistance = self?.manualDistancePreset.distanceMeters ?? 1.5
+            }
         }
     }
 
