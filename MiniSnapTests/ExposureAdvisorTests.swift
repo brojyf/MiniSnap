@@ -27,12 +27,42 @@ final class ExposureAdvisorTests: XCTestCase {
     @MainActor
     func testSavedFramedPhotoUsesLightGrayFilmBorder() {
         let image = PhotoExportRenderer.framedPhoto(photo: solidImage(color: .red))
-        let borderColor = sampledColor(in: image, at: CGPoint(x: 20, y: 20))
+        let borderColor = sampledColor(in: image, at: CGPoint(x: 68, y: 68))
 
-        XCTAssertEqual(image.size, CGSize(width: 1080, height: 1720))
+        XCTAssertEqual(image.size, CGSize(width: 1176, height: 1816))
         XCTAssertEqual(borderColor.red, 0.9, accuracy: 0.02)
         XCTAssertEqual(borderColor.green, 0.9, accuracy: 0.02)
         XCTAssertEqual(borderColor.blue, 0.9, accuracy: 0.02)
+    }
+
+    @MainActor
+    func testSavedFramedPhotoUsesWhiteBottomBorder() {
+        let image = PhotoExportRenderer.framedPhoto(photo: solidImage(color: .red))
+        let borderColor = sampledColor(in: image, at: CGPoint(x: 68, y: 1548))
+
+        XCTAssertEqual(borderColor.red, 1.0, accuracy: 0.02)
+        XCTAssertEqual(borderColor.green, 1.0, accuracy: 0.02)
+        XCTAssertEqual(borderColor.blue, 1.0, accuracy: 0.02)
+    }
+
+    @MainActor
+    func testSavedFramedPhotoAddsSubtleOuterShadow() {
+        let image = PhotoExportRenderer.framedPhoto(photo: solidImage(color: .red))
+        let shadowColor = sampledColor(in: image, at: CGPoint(x: 32, y: 900))
+
+        XCTAssertLessThan(shadowColor.red, 0.99)
+        XCTAssertLessThan(shadowColor.green, 0.99)
+        XCTAssertLessThan(shadowColor.blue, 0.99)
+    }
+
+    @MainActor
+    func testSavedFramedPhotoStrokesImageWithThinBlackBorder() {
+        let image = PhotoExportRenderer.framedPhoto(photo: solidImage(color: .red))
+        let strokeColor = sampledColor(in: image, at: CGPoint(x: 129, y: 700))
+
+        XCTAssertEqual(strokeColor.red, 0.2, accuracy: 0.04)
+        XCTAssertLessThan(strokeColor.green, 0.05)
+        XCTAssertLessThan(strokeColor.blue, 0.05)
     }
 
     @MainActor

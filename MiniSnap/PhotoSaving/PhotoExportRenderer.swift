@@ -2,19 +2,33 @@ import UIKit
 
 enum PhotoExportRenderer {
     private static let filmColor = UIColor(white: 0.9, alpha: 1)
+    private static let bottomFilmColor = UIColor.white
+    private static let canvasColor = UIColor.white
+    static let imageStrokeColor = UIColor.black.withAlphaComponent(0.4)
     private static let panelColor = UIColor(white: 0.95, alpha: 1)
     private static let tileColor = UIColor.black.withAlphaComponent(0.08)
+    private static let watermarkText = "MiniSnap"
+    private static let watermarkFontSize: CGFloat = 52
+    private static let watermarkColor = UIColor.black.withAlphaComponent(0.4)
+    private static let watermarkRightPadding: CGFloat = 38
+    private static let watermarkBottomPadding: CGFloat = 40
 
     static func framedPhoto(photo: UIImage) -> UIImage {
         let filmSize = CGSize(width: 1080, height: 1720)
-        let imageRect = CGRect(x: 80, y: 140, width: 920, height: 1240)
-        let renderer = UIGraphicsImageRenderer(size: filmSize)
+        let shadowInset: CGFloat = 48
+        let canvasSize = CGSize(width: filmSize.width + shadowInset * 2, height: filmSize.height + shadowInset * 2)
+        let filmRect = CGRect(x: shadowInset, y: shadowInset, width: filmSize.width, height: filmSize.height)
+        let imageRect = CGRect(x: filmRect.minX + 80, y: filmRect.minY + 140, width: 920, height: 1240)
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: canvasSize, format: format)
 
         return renderer.image { context in
-            filmColor.setFill()
-            context.fill(CGRect(origin: .zero, size: filmSize))
-
+            drawFilmShadow(in: filmRect, context: context.cgContext)
+            drawFilmBackground(in: filmRect, imageRect: imageRect)
             draw(photo, in: imageRect)
+            drawImageStroke(in: imageRect)
+            drawWatermark(filmRect: filmRect, imageRect: imageRect)
         }
     }
 
@@ -28,6 +42,7 @@ enum PhotoExportRenderer {
             context.fill(CGRect(origin: .zero, size: size))
 
             draw(photo, in: imageRect)
+            drawImageStroke(in: imageRect)
 
             let panelRect = CGRect(x: 80, y: 1440, width: 920, height: 320)
             panelColor.setFill()
@@ -64,6 +79,52 @@ enum PhotoExportRenderer {
                 drawText(item.1, in: CGRect(x: tileRect.minX + 18, y: tileRect.minY + 58, width: tileRect.width - 36, height: 44), size: 34, weight: .bold)
             }
         }
+    }
+
+    private static func drawFilmShadow(in filmRect: CGRect, context: CGContext) {
+        context.saveGState()
+        context.setShadow(offset: .zero, blur: 28, color: UIColor.black.withAlphaComponent(0.16).cgColor)
+        canvasColor.setFill()
+        UIBezierPath(rect: filmRect).fill()
+        context.restoreGState()
+    }
+
+    private static func drawWatermark(filmRect: CGRect, imageRect: CGRect) {
+        let font = UIFont(name: "ChalkboardSE-Bold", size: watermarkFontSize)
+            ?? UIFont.systemFont(ofSize: watermarkFontSize, weight: .semibold)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: watermarkColor
+        ]
+        let text = watermarkText as NSString
+        let textSize = text.size(withAttributes: attributes)
+        let origin = CGPoint(
+            x: filmRect.maxX - watermarkRightPadding - textSize.width,
+            y: filmRect.maxY - watermarkBottomPadding - textSize.height
+        )
+        text.draw(at: origin, withAttributes: attributes)
+    }
+
+    private static func drawImageStroke(in imageRect: CGRect) {
+        imageStrokeColor.setStroke()
+        let path = UIBezierPath(rect: imageRect.insetBy(dx: 1, dy: 1))
+        path.lineWidth = 1
+        path.stroke()
+    }
+
+    private static func drawFilmBackground(in filmRect: CGRect, imageRect: CGRect) {
+        filmColor.setFill()
+        UIRectFill(filmRect)
+
+        bottomFilmColor.setFill()
+        UIRectFill(
+            CGRect(
+                x: filmRect.minX,
+                y: imageRect.maxY,
+                width: filmRect.width,
+                height: filmRect.maxY - imageRect.maxY
+            )
+        )
     }
 
     private static func draw(_ image: UIImage, in rect: CGRect) {

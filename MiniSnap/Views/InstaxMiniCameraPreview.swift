@@ -44,6 +44,7 @@ enum InstaxMiniLayout {
     static let paperColor = Color(white: 0.9)
     static let bottomPaperColor = Color.white
     static let paperStrokeColor = Color(white: 0.96)
+    static let imageStrokeColor = Color(uiColor: PhotoExportRenderer.imageStrokeColor)
 
     static func imageFrame(in size: CGSize) -> CGRect {
         let horizontalInset = max(20, size.width * 0.055)
@@ -103,7 +104,7 @@ struct InstaxMiniViewfinderOverlay: View {
                     .position(x: filmFrame.midX, y: filmFrame.midY)
 
                 RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .stroke(InstaxMiniLayout.paperStrokeColor, lineWidth: 2)
+                    .strokeBorder(InstaxMiniLayout.imageStrokeColor, lineWidth: 1)
                     .frame(width: imageFrame.width, height: imageFrame.height)
                     .position(x: imageFrame.midX, y: imageFrame.midY)
             }
@@ -125,9 +126,9 @@ struct InstaxMiniViewfinderOverlay: View {
             path.addRect(
                 CGRect(
                     x: filmFrame.minX,
-                    y: imageFrame.maxY - 1,
+                    y: imageFrame.maxY,
                     width: filmFrame.width,
-                    height: filmFrame.maxY - imageFrame.maxY + 1
+                    height: filmFrame.maxY - imageFrame.maxY
                 )
             )
         }
