@@ -3,6 +3,7 @@ import SwiftUI
 struct ControlSummary: View {
     let recommendation: ExposureRecommendation
     let subjectDetection: SubjectDetection
+    let rotationAngle: Angle
 
     var body: some View {
         let bgOverexposed = recommendation.warnings.contains { $0.contains("背景高光") }
@@ -16,22 +17,26 @@ struct ControlSummary: View {
                 SummaryTile(
                     title: "距离",
                     value: recommendation.control.focusMode.rangeText,
-                    systemImage: "scope"
+                    systemImage: "scope",
+                    rotationAngle: rotationAngle
                 )
                 SummaryTile(
                     title: "曝光",
                     value: recommendation.control.ev.rawValue,
-                    systemImage: "plusminus"
+                    systemImage: "plusminus",
+                    rotationAngle: rotationAngle
                 )
                 SummaryTile(
                     title: "闪光",
                     value: recommendation.control.flash.localizedName,
-                    systemImage: "bolt.fill"
+                    systemImage: "bolt.fill",
+                    rotationAngle: rotationAngle
                 )
                 SummaryTile(
                     title: "主体",
                     value: subjectDetection.localizedName,
-                    systemImage: subjectDetection.systemImage
+                    systemImage: subjectDetection.systemImage,
+                    rotationAngle: rotationAngle
                 )
             }
         }
@@ -46,6 +51,7 @@ struct SummaryTile: View {
     let value: String
     var detail: String? = nil
     let systemImage: String
+    let rotationAngle: Angle
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -66,5 +72,7 @@ struct SummaryTile: View {
         .frame(maxWidth: .infinity, minHeight: 66, maxHeight: 66, alignment: .leading)
         .padding(8)
         .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .rotationEffect(rotationAngle)
+        .animation(.easeInOut(duration: 0.34), value: rotationAngle)
     }
 }

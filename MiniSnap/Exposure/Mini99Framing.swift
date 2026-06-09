@@ -6,7 +6,7 @@ enum Mini99Framing {
     static let imageShortSideMillimeters = 46.0
     static let filmLongSideMillimeters = 86.0
     static let filmShortSideMillimeters = 54.0
-    static let topBorderMillimeters = 7.0
+    static let topBorderMillimeters = 6.0
     static let focalLengthMillimeters = 60.0
     // Mini 99's 60mm lens on instax mini is commonly framed as about a 35mm full-frame lens.
     static let targetFullFrameEquivalentFocalLengthMillimeters = 35.0

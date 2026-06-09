@@ -42,6 +42,7 @@ enum InstaxMiniLayout {
     static let bottomPanelDownshift: CGFloat = 20
     static let filmPanelGap: CGFloat = 12
     static let paperColor = Color(white: 0.9)
+    static let bottomPaperColor = Color.white
     static let paperStrokeColor = Color(white: 0.96)
 
     static func imageFrame(in size: CGSize) -> CGRect {
@@ -90,11 +91,11 @@ struct InstaxMiniViewfinderOverlay: View {
             let filmFrame = InstaxMiniLayout.filmFrame(around: imageFrame)
 
             ZStack {
-                bottomPaperBorderFill(filmFrame: filmFrame, imageFrame: imageFrame)
-                    .fill(InstaxMiniLayout.paperColor)
-
                 paperBorder(filmFrame: filmFrame, imageFrame: imageFrame)
                     .fill(InstaxMiniLayout.paperColor, style: FillStyle(eoFill: true))
+
+                bottomPaperBorderFill(filmFrame: filmFrame, imageFrame: imageFrame)
+                    .fill(InstaxMiniLayout.bottomPaperColor)
 
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
                     .stroke(InstaxMiniLayout.paperStrokeColor, lineWidth: 1.5)

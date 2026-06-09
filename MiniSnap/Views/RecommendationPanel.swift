@@ -6,6 +6,7 @@ struct RecommendationPanel: View {
     let subjectDetection: SubjectDetection
     let authorizationStatus: AVAuthorizationStatus
     let statusText: String
+    let rotationAngle: Angle
     let requestAccess: () -> Void
 
     var body: some View {
@@ -13,7 +14,11 @@ struct RecommendationPanel: View {
             switch authorizationStatus {
             case .authorized:
                 if let recommendation {
-                    ControlSummary(recommendation: recommendation, subjectDetection: subjectDetection)
+                    ControlSummary(
+                        recommendation: recommendation,
+                        subjectDetection: subjectDetection,
+                        rotationAngle: rotationAngle
+                    )
                 } else {
                     WaitingForFaceView(statusText: statusText)
                 }
