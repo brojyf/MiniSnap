@@ -37,8 +37,8 @@ struct InstaxMiniCameraPreview: View {
 
 enum InstaxMiniLayout {
     static let bottomPanelHeight: CGFloat = 140
-    static let bottomPanelPadding: CGFloat = 12
-    static let bottomPanelCornerRadius: CGFloat = 40
+    static let bottomPanelPadding: CGFloat = 11
+    static let bottomPanelCornerRadius: CGFloat = 43
     static let bottomPanelDownshift: CGFloat = 20
     static let filmPanelGap: CGFloat = 12
     static let paperColor = Color(white: 0.9)

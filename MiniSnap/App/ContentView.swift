@@ -15,23 +15,9 @@ struct ContentView: View {
                 background
 
                 VStack(spacing: 0) {
-                    AppTitleView()
+                    AppTitleView(recommendation: previewRecommendation ?? camera.recommendation)
                         .padding(.horizontal, 18)
                         .padding(.top, 12)
-
-                    if let saveStatusText = camera.saveStatusText {
-                        SaveStatusView(saveStatusText: saveStatusText)
-                            .padding(.horizontal, 18)
-                            .padding(.top, 10)
-                    }
-
-                    DistanceToolbar(
-                        selectedPreset: $camera.manualDistancePreset,
-                        automaticDistanceAvailable: camera.automaticDistanceAvailable,
-                        automaticDistance: camera.automaticDistance
-                    )
-                    .padding(.horizontal, 18)
-                    .padding(.top, 8)
 
                     Spacer(minLength: 0)
                 }
@@ -95,29 +81,24 @@ struct ContentView: View {
 }
 
 private struct AppTitleView: View {
+    let recommendation: ExposureRecommendation?
+
     var body: some View {
         HStack {
             Text("MiniSnap")
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
+            Spacer()
+            if let recommendation {
+                HStack(spacing: 4) {
+                    Image(systemName: "camera.aperture")
+                    Text(recommendation.control.shootingMode.localizedName)
+                        .lineLimit(1)
+                }
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
-            Spacer()
-        }
-    }
-}
-
-private struct SaveStatusView: View {
-    let saveStatusText: String
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Text(saveStatusText)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
-
-            Spacer()
+            }
         }
     }
 }

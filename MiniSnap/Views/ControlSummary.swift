@@ -13,7 +13,6 @@ struct ControlSummary: View {
                     .foregroundStyle(.orange)
             }
             HStack(spacing: 8) {
-                SummaryTile(title: "模式", value: recommendation.control.shootingMode.localizedName, systemImage: "camera.aperture")
                 SummaryTile(
                     title: "距离",
                     value: recommendation.control.focusMode.rangeText,

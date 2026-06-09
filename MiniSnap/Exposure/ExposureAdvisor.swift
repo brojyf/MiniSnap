@@ -72,11 +72,11 @@ enum Mini99FocusMode: String, CaseIterable, Identifiable {
     var rangeText: String {
         switch self {
         case .macro:
-            "0.3-0.6m"
+            "0.3-0.6"
         case .standard:
-            "0.6-3m"
+            "0.6-3"
         case .landscape:
-            "3m 到无穷"
+            "3-∞"
         }
     }
 
