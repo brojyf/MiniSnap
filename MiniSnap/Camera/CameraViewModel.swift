@@ -15,6 +15,7 @@ final class CameraViewModel: NSObject, ObservableObject {
     @Published private(set) var automaticDistance: Double?
     @Published private(set) var saveStatusText: String?
     @Published private(set) var isSavingPhoto = false
+    @Published var showsUnsupportedDeviceAlert = false
     @Published var manualDistancePreset: SubjectDistancePreset = .standard {
         didSet {
             if !automaticDistanceAvailable {
@@ -26,6 +27,9 @@ final class CameraViewModel: NSObject, ObservableObject {
 
     let session = AVCaptureSession()
 
+    // 与 LumaAnalyzer.centerSubjectRect 的 0.42 比例对齐，确保无主体时深度与亮度采样同一区域
+    private static let centerSubjectVisionBounds = CGRect(x: 0.29, y: 0.29, width: 0.42, height: 0.42)
+
     private let sessionQueue = DispatchQueue(label: "miniSnap.camera.session")
     private let analysisQueue = DispatchQueue(label: "miniSnap.camera.analysis")
     private let videoOutput = AVCaptureVideoDataOutput()
@@ -34,7 +38,7 @@ final class CameraViewModel: NSObject, ObservableObject {
     private let watchPreviewTransmitter = WatchPreviewTransmitter()
     private var isConfigured = false
     private var lastAnalysisTime = Date.distantPast
-    private var latestFaceBounds: CGRect?
+    private var latestSubjectBounds: CGRect?
     private var latestFrameImage: UIImage?
 
     override init() {
@@ -112,8 +116,13 @@ final class CameraViewModel: NSObject, ObservableObject {
             session.sessionPreset = .high
         }
 
-        guard let camera = makeBackCamera(),
-              let input = try? AVCaptureDeviceInput(device: camera),
+        guard let camera = makeBackCamera() else {
+            session.commitConfiguration()
+            publishUnsupportedDevice()
+            return
+        }
+
+        guard let input = try? AVCaptureDeviceInput(device: camera),
               session.canAddInput(input)
         else {
             session.commitConfiguration()
@@ -147,12 +156,11 @@ final class CameraViewModel: NSObject, ObservableObject {
     }
 
     private func makeBackCamera() -> AVCaptureDevice? {
-        // 按提案：优先选择单广角相机，避免多摄融合把变焦锁死为 1.0
+        // 自动测距优先：LiDAR(Pro) > DualWide/Triple/Dual(普通版双摄)。仅单广角的老机型不支持。
         let preferredTypes: [AVCaptureDevice.DeviceType] = [
-            .builtInWideAngleCamera,
             .builtInLiDARDepthCamera,
-            .builtInTripleCamera,
             .builtInDualWideCamera,
+            .builtInTripleCamera,
             .builtInDualCamera
         ]
 
@@ -191,6 +199,8 @@ final class CameraViewModel: NSObject, ObservableObject {
         let rawFOV = camera.activeFormat.videoFieldOfView
         let fieldOfView = correctedFOV > 0 ? correctedFOV : rawFOV
 
+        // 启用深度后，可用变焦范围会被深度交付约束收紧；
+        // min/maxAvailableVideoZoomFactor 已动态反映此约束，直接使用即可。
         let minZoom = camera.minAvailableVideoZoomFactor
         let maxZoom = camera.maxAvailableVideoZoomFactor
 
@@ -204,6 +214,9 @@ final class CameraViewModel: NSObject, ObservableObject {
         print("[CameraViewModel] FOV raw/corrected:", rawFOV, "/", correctedFOV, "-> using:", fieldOfView)
         print("[CameraViewModel] Device zoom range:", "min =", minZoom, "max =", maxZoom)
         print("[CameraViewModel] Computed zoomFactor:", zoomFactor)
+        if zoomFactor >= maxZoom {
+            print("[CameraViewModel] WARNING: zoom hit ceiling; Mini99 target focal length may NOT be reached")
+        }
 
         do {
             try camera.lockForConfiguration()
@@ -260,17 +273,17 @@ final class CameraViewModel: NSObject, ObservableObject {
             subjectBounds = largestFace.boundingBox
             subjectDetection = .face
             nextStatusText = "检测到人脸"
-            latestFaceBounds = largestFace.boundingBox
+            latestSubjectBounds = largestFace.boundingBox
         } else if let largestHuman {
             subjectBounds = largestHuman.boundingBox
             subjectDetection = .person
             nextStatusText = "检测到人物，按人体估算"
-            latestFaceBounds = nil
+            latestSubjectBounds = largestHuman.boundingBox
         } else {
             subjectBounds = nil
             subjectDetection = .centerSubject
             nextStatusText = "未检测到人物，按中心主体估算"
-            latestFaceBounds = nil
+            latestSubjectBounds = Self.centerSubjectVisionBounds
         }
 
         guard let measurement = LumaAnalyzer.measurement(
@@ -290,9 +303,6 @@ final class CameraViewModel: NSObject, ObservableObject {
             self?.watchPreviewTransmitter.sendPreview(image: frameImage)
             self?.measurement = measurement
             self?.recommendation = recommendation
-            if subjectDetection != .face {
-                self?.automaticDistance = nil
-            }
             self?.statusText = nextStatusText
         }
     }
@@ -358,6 +368,13 @@ final class CameraViewModel: NSObject, ObservableObject {
         }
     }
 
+    private func publishUnsupportedDevice() {
+        DispatchQueue.main.async { [weak self] in
+            self?.statusText = "本机型不支持自动测距"
+            self?.showsUnsupportedDeviceAlert = true
+        }
+    }
+
     private func publishAutomaticDistanceAvailability(_ isAvailable: Bool) {
         DispatchQueue.main.async { [weak self] in
             self?.automaticDistanceAvailable = isAvailable
@@ -401,8 +418,8 @@ extension CameraViewModel: AVCaptureDepthDataOutputDelegate {
         connection: AVCaptureConnection
     ) {
         guard
-            let latestFaceBounds,
-            let distance = DepthDistanceEstimator.distanceMeters(from: depthData, faceBounds: latestFaceBounds)
+            let latestSubjectBounds,
+            let distance = DepthDistanceEstimator.distanceMeters(from: depthData, subjectBounds: latestSubjectBounds)
         else {
             return
         }

@@ -4,7 +4,7 @@ import CoreVideo
 import Foundation
 
 enum DepthDistanceEstimator {
-    static func distanceMeters(from depthData: AVDepthData, faceBounds: CGRect) -> Double? {
+    static func distanceMeters(from depthData: AVDepthData, subjectBounds: CGRect) -> Double? {
         let convertedDepthData = depthData.converting(toDepthDataType: kCVPixelFormatType_DepthFloat32)
         let depthMap = convertedDepthData.depthDataMap
 
@@ -20,15 +20,15 @@ enum DepthDistanceEstimator {
         }
 
         let depthPointer = baseAddress.assumingMemoryBound(to: Float32.self)
-        let faceRect = pixelRect(fromVisionBounds: faceBounds, imageWidth: width, imageHeight: height)
-        let sampleWidth = Int(faceRect.width)
-        let sampleHeight = Int(faceRect.height)
+        let subjectRect = pixelRect(fromVisionBounds: subjectBounds, imageWidth: width, imageHeight: height)
+        let sampleWidth = Int(subjectRect.width)
+        let sampleHeight = Int(subjectRect.height)
         let stepX = max(1, sampleWidth / 24)
         let stepY = max(1, sampleHeight / 24)
-        let minX = max(0, min(width - 1, Int(faceRect.minX.rounded(.down))))
-        let maxX = max(minX + 1, min(width, Int(faceRect.maxX.rounded(.up))))
-        let minY = max(0, min(height - 1, Int(faceRect.minY.rounded(.down))))
-        let maxY = max(minY + 1, min(height, Int(faceRect.maxY.rounded(.up))))
+        let minX = max(0, min(width - 1, Int(subjectRect.minX.rounded(.down))))
+        let maxX = max(minX + 1, min(width, Int(subjectRect.maxX.rounded(.up))))
+        let minY = max(0, min(height - 1, Int(subjectRect.minY.rounded(.down))))
+        let maxY = max(minY + 1, min(height, Int(subjectRect.maxY.rounded(.up))))
         let floatsPerRow = bytesPerRow / MemoryLayout<Float32>.stride
 
         var samples: [Double] = []

@@ -50,6 +50,11 @@ struct ContentView: View {
         }
         .animation(.snappy(duration: 0.28), value: camera.isSavingPhoto)
         .animation(.snappy(duration: 0.28), value: camera.saveStatusText)
+        .alert("不支持的机型", isPresented: $camera.showsUnsupportedDeviceAlert) {
+            Button("退出", role: .destructive) { exit(0) }
+        } message: {
+            Text("MiniSnap 仅支持配备双摄或 LiDAR 的机型，单摄像头设备无法启用自动测距。")
+        }
         .task {
             motionRotation.start()
 
