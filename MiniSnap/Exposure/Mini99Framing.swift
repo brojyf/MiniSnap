@@ -45,12 +45,7 @@ enum Mini99Framing {
         minimumZoomFactor: CGFloat,
         maximumZoomFactor: CGFloat
     ) -> CGFloat {
-        // 调试：输入与设备变焦范围
-        print("[Mini99Framing] Input FOV(deg):", cameraHorizontalFieldOfViewDegrees)
-        print("[Mini99Framing] Device zoom range:", "min =", minimumZoomFactor, "max =", maximumZoomFactor)
-
         guard cameraHorizontalFieldOfViewDegrees > 0 else {
-            print("[Mini99Framing] Invalid FOV. Using minimum zoom factor:", minimumZoomFactor)
             return minimumZoomFactor
         }
 
@@ -59,7 +54,6 @@ enum Mini99Framing {
         let currentEquivalentFocal = fullFrameLandscapeWidthMillimeters / (2 * tan(halfAngle))
 
         guard currentEquivalentFocal.isFinite, currentEquivalentFocal > 0 else {
-            print("[Mini99Framing] Invalid equivalent focal length. Using minimum zoom factor:", minimumZoomFactor)
             return minimumZoomFactor
         }
 
@@ -69,16 +63,8 @@ enum Mini99Framing {
         // 计算未裁剪的匹配倍数
         let rawMatching = targetEquivalent / currentEquivalentFocal
 
-        // 调试输出
-        print("[Mini99Framing] Current equivalent focal length(mm):", String(format: "%.3f", currentEquivalentFocal))
-        print("[Mini99Framing] Target equivalent focal length(mm):", String(format: "%.3f", targetEquivalent))
-        print("[Mini99Framing] Raw matching zoom:", String(format: "%.3f", rawMatching))
-
         // 裁剪到设备允许范围
-        let clamped = min(max(CGFloat(rawMatching), minimumZoomFactor), maximumZoomFactor)
-        print("[Mini99Framing] Final zoom after clamp:", String(format: "%.3f", clamped))
-
-        return clamped
+        return min(max(CGFloat(rawMatching), minimumZoomFactor), maximumZoomFactor)
     }
 
     private static func degreesToRadians(_ degrees: Double) -> Double {
