@@ -184,7 +184,7 @@ final class ExposureAdvisorTests: XCTestCase {
         )
 
         XCTAssertEqual(recommendation.control.focusMode, .macro)
-        XCTAssertEqual(recommendation.control.focusMode.rangeText, "0.3-0.6m")
+        XCTAssertEqual(recommendation.control.focusMode.rangeText, "0.3-0.6")
     }
 
     @MainActor
@@ -299,6 +299,39 @@ final class ExposureAdvisorTests: XCTestCase {
 
         XCTAssertEqual(recommendation.control, ExposureControl(shootingMode: .normal, focusMode: .standard, ev: .dMinus, flash: .off))
         XCTAssertTrue(recommendation.warnings.contains("背景高光有过曝风险"))
+    }
+
+    @MainActor
+    func testFramedPhotoCanRenderOffMainThread() async {
+        let source = solidImage(color: .red)
+        let rendered = await Task.detached(priority: .userInitiated) {
+            PhotoExportRenderer.framedPhoto(photo: source)
+        }.value
+
+        XCTAssertEqual(rendered.size, CGSize(width: 1176, height: 1816))
+    }
+
+    @MainActor
+    func testRecommendationImageCanRenderOffMainThread() async {
+        let source = solidImage(color: .red)
+        let recommendation = ExposureAdvisor.decide(
+            ExposureInput(faceLuma: 0.54, sceneLuma: 0.52, highlightRatio: 0.04, faceAreaRatio: 0.07, distance: 1.5)
+        )
+        let rendered = await Task.detached(priority: .userInitiated) {
+            PhotoExportRenderer.recommendationImage(photo: source, recommendation: recommendation)
+        }.value
+
+        XCTAssertEqual(rendered.size, CGSize(width: 1080, height: 1920))
+    }
+
+    @MainActor
+    func testExportedPhotoDataIsJpeg() {
+        let image = PhotoExportRenderer.framedPhoto(photo: solidImage(color: .red))
+        let data = PhotoLibrarySaver.encodedPhotoData(for: image)
+
+        XCTAssertNotNil(data)
+        // JPEG 文件以 FF D8 FF 开头
+        XCTAssertEqual(Array((data ?? Data()).prefix(3)), [0xFF, 0xD8, 0xFF])
     }
 
     private func solidImage(color: UIColor) -> UIImage {
