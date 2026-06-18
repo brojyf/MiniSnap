@@ -36,6 +36,7 @@ final class CameraViewModel: NSObject, ObservableObject {
     private let depthOutput = AVCaptureDepthDataOutput()
     private let imageContext = CIContext()
     private let watchPreviewTransmitter = WatchPreviewTransmitter()
+    private let captureFeedback = UIImpactFeedbackGenerator(style: .medium)
     private var isConfigured = false
     private var lastAnalysisTime = Date.distantPast
     private var latestSubjectBounds: CGRect?
@@ -104,6 +105,9 @@ final class CameraViewModel: NSObject, ObservableObject {
 
     private func configureSession() {
         session.beginConfiguration()
+
+        // 不让相机会话重置 App 的 AVAudioSession，否则会破坏音量键拍照依赖的会话配置
+        session.automaticallyConfiguresApplicationAudioSession = false
 
         // 按提案：优先使用更宽松的预设，便于放开变焦范围
         if session.canSetSessionPreset(.high) {
@@ -210,24 +214,12 @@ final class CameraViewModel: NSObject, ObservableObject {
             maximumZoomFactor: maxZoom
         )
 
-        // 调试输出：设置前的状态
-        print("[CameraViewModel] FOV raw/corrected:", rawFOV, "/", correctedFOV, "-> using:", fieldOfView)
-        print("[CameraViewModel] Device zoom range:", "min =", minZoom, "max =", maxZoom)
-        print("[CameraViewModel] Computed zoomFactor:", zoomFactor)
-        if zoomFactor >= maxZoom {
-            print("[CameraViewModel] WARNING: zoom hit ceiling; Mini99 target focal length may NOT be reached")
-        }
-
         do {
             try camera.lockForConfiguration()
             defer { camera.unlockForConfiguration() }
             camera.videoZoomFactor = zoomFactor
-
-            // 设置后再读回确认
-            print("[CameraViewModel] Applied zoomFactor:", camera.videoZoomFactor)
         } catch {
             publishStatus("无法匹配 Mini 99 取景")
-            print("[CameraViewModel] Failed to set zoom:", error.localizedDescription)
         }
     }
 
@@ -322,33 +314,39 @@ final class CameraViewModel: NSObject, ObservableObject {
             return
         }
 
-        guard let latestFrameImage else {
+        guard let frameImage = latestFrameImage else {
             saveStatusText = "还没有可保存的画面"
             clearSaveStatusAfterDelay("还没有可保存的画面")
             return
         }
 
         let recommendation = recommendation
-        let image = includingRecommendation
-            ? PhotoExportRenderer.recommendationImage(photo: latestFrameImage, recommendation: recommendation)
-            : PhotoExportRenderer.framedPhoto(photo: latestFrameImage)
+
+        // 提交保存的瞬间给一次触觉反馈，确认按键已识别（即便后续保存在后台进行）
+        captureFeedback.impactOccurred()
 
         isSavingPhoto = true
         saveStatusText = "正在保存"
 
-        Task { @MainActor in
+        // 渲染与编码均为重 CPU 操作，放到后台线程，避免冻结主线程影响连拍与 loading 动画
+        Task.detached(priority: .userInitiated) {
+            let finalStatus: String
             do {
+                let image = includingRecommendation
+                    ? PhotoExportRenderer.recommendationImage(photo: frameImage, recommendation: recommendation)
+                    : PhotoExportRenderer.framedPhoto(photo: frameImage)
+
                 try await PhotoLibrarySaver.save(image)
-                let finalStatus = includingRecommendation ? "已保存参数图" : "已保存相框照片"
-                saveStatusText = finalStatus
-                clearSaveStatusAfterDelay(finalStatus)
+                finalStatus = includingRecommendation ? "已保存参数图" : "已保存相框照片"
             } catch {
-                let finalStatus = "保存失败：\(error.localizedDescription)"
-                saveStatusText = finalStatus
-                clearSaveStatusAfterDelay(finalStatus)
+                finalStatus = "保存失败：\(error.localizedDescription)"
             }
 
-            isSavingPhoto = false
+            await MainActor.run {
+                self.saveStatusText = finalStatus
+                self.isSavingPhoto = false
+                self.clearSaveStatusAfterDelay(finalStatus)
+            }
         }
     }
 
