@@ -13,7 +13,7 @@ enum PhotoExportRenderer {
     private static let watermarkRightPadding: CGFloat = 38
     private static let watermarkBottomPadding: CGFloat = 40
 
-    static func framedPhoto(photo: UIImage) -> UIImage {
+    nonisolated static func framedPhoto(photo: UIImage) -> UIImage {
         let filmSize = CGSize(width: 1080, height: 1720)
         let shadowInset: CGFloat = 48
         let canvasSize = CGSize(width: filmSize.width + shadowInset * 2, height: filmSize.height + shadowInset * 2)
@@ -32,7 +32,7 @@ enum PhotoExportRenderer {
         }
     }
 
-    static func recommendationImage(photo: UIImage, recommendation: ExposureRecommendation?) -> UIImage {
+    nonisolated static func recommendationImage(photo: UIImage, recommendation: ExposureRecommendation?) -> UIImage {
         let size = CGSize(width: 1080, height: 1920)
         let imageRect = CGRect(x: 80, y: 120, width: 920, height: 1240)
         let renderer = UIGraphicsImageRenderer(size: size)
@@ -81,7 +81,7 @@ enum PhotoExportRenderer {
         }
     }
 
-    private static func drawFilmShadow(in filmRect: CGRect, context: CGContext) {
+    nonisolated private static func drawFilmShadow(in filmRect: CGRect, context: CGContext) {
         context.saveGState()
         context.setShadow(offset: .zero, blur: 28, color: UIColor.black.withAlphaComponent(0.16).cgColor)
         canvasColor.setFill()
@@ -89,7 +89,7 @@ enum PhotoExportRenderer {
         context.restoreGState()
     }
 
-    private static func drawWatermark(filmRect: CGRect, imageRect: CGRect) {
+    nonisolated private static func drawWatermark(filmRect: CGRect, imageRect: CGRect) {
         let font = UIFont(name: "ChalkboardSE-Bold", size: watermarkFontSize)
             ?? UIFont.systemFont(ofSize: watermarkFontSize, weight: .semibold)
         let attributes: [NSAttributedString.Key: Any] = [
@@ -105,14 +105,14 @@ enum PhotoExportRenderer {
         text.draw(at: origin, withAttributes: attributes)
     }
 
-    private static func drawImageStroke(in imageRect: CGRect) {
+    nonisolated private static func drawImageStroke(in imageRect: CGRect) {
         imageStrokeColor.setStroke()
         let path = UIBezierPath(rect: imageRect.insetBy(dx: 1, dy: 1))
         path.lineWidth = 1
         path.stroke()
     }
 
-    private static func drawFilmBackground(in filmRect: CGRect, imageRect: CGRect) {
+    nonisolated private static func drawFilmBackground(in filmRect: CGRect, imageRect: CGRect) {
         filmColor.setFill()
         UIRectFill(filmRect)
 
@@ -127,7 +127,7 @@ enum PhotoExportRenderer {
         )
     }
 
-    private static func draw(_ image: UIImage, in rect: CGRect) {
+    nonisolated private static func draw(_ image: UIImage, in rect: CGRect) {
         guard let cgImage = image.cgImage else {
             return
         }
@@ -152,7 +152,7 @@ enum PhotoExportRenderer {
         UIImage(cgImage: cropped, scale: image.scale, orientation: image.imageOrientation).draw(in: rect)
     }
 
-    private static func drawText(
+    nonisolated private static func drawText(
         _ text: String,
         in rect: CGRect,
         size: CGFloat,
